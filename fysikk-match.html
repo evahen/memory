@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fysikk — Koble størrelser og enheter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,700;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8;
+  --surface: #fffdf7;
+  --ink: #1a1208;
+  --ink-dim: #7a6e58;
+  --left-col: #1a1208;
+  --right-col: #1a1208;
+  --tag-storrelse: #c8401a;
+  --tag-enhet: #1a6840;
+  --chip-bg: #fff;
+  --chip-border: #d4caba;
+  --chip-hover: #fff8ee;
+  --accent: #c8401a;
+  --accent2: #1a6840;
+  --line-color: rgba(200,64,26,0.35);
+  --matched-bg-s: #fff1ee;
+  --matched-bg-e: #eef5f1;
+  --matched-border-s: #c8401a;
+  --matched-border-e: #1a6840;
+  --wrong: #d44;
+  --shadow: 0 2px 12px rgba(26,18,8,0.10);
+  --shadow-drag: 0 8px 32px rgba(26,18,8,0.22);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  padding: 0 0 60px;
+  position: relative;
+}
+
+/* Subtle grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(26,18,8,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,18,8,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.header {
+  background: var(--ink);
+  color: var(--bg);
+  padding: 18px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  flex-wrap: wrap;
+}
+
+.header h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+
+.header h1 em {
+  font-style: italic;
+  font-weight: 300;
+  color: #d4a96a;
+}
+
+.header-stats {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.hstat {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: rgba(245,240,232,0.55);
+  text-transform: uppercase;
+}
+.hstat span {
+  color: #d4a96a;
+  font-weight: 500;
+  font-size: 0.9rem;
+  margin-left: 4px;
+}
+
+.btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 18px;
+  border: 1px solid rgba(245,240,232,0.25);
+  background: transparent;
+  color: var(--bg);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(245,240,232,0.12); }
+.btn.primary { border-color: #d4a96a; color: #d4a96a; }
+.btn.primary:hover { background: #d4a96a; color: var(--ink); }
+
+.instructions {
+  text-align: center;
+  padding: 16px 20px 4px;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+  position: relative;
+  z-index: 1;
+}
+
+.columns-wrap {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  gap: 0;
+  max-width: 900px;
+  margin: 20px auto 0;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+  align-items: start;
+}
+
+.col-header {
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-left: 4px;
+  font-weight: 500;
+}
+.col-header.left { color: var(--tag-storrelse); }
+.col-header.right { color: var(--tag-enhet); }
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.middle-col {
+  position: relative;
+}
+
+/* SVG lines canvas */
+#lineCanvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.chip {
+  background: var(--chip-bg);
+  border: 1.5px solid var(--chip-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, transform 0.1s;
+  user-select: none;
+  position: relative;
+  line-height: 1.3;
+  box-shadow: var(--shadow);
+  -webkit-user-drag: none;
+}
+
+.chip:hover:not(.matched):not(.dragging-active) {
+  border-color: var(--ink-dim);
+  background: var(--chip-hover);
+  transform: translateY(-1px);
+}
+
+.chip.selected {
+  border-color: var(--accent);
+  background: #fff8f5;
+  box-shadow: 0 0 0 2px rgba(200,64,26,0.2), var(--shadow);
+  transform: translateY(-1px);
+}
+
+.chip.selected.enhet-chip {
+  border-color: var(--accent2);
+  background: #f4fbf7;
+  box-shadow: 0 0 0 2px rgba(26,104,64,0.2), var(--shadow);
+}
+
+.chip.matched {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chip.matched.storrelse-chip {
+  background: var(--matched-bg-s);
+  border-color: var(--matched-border-s);
+}
+
+.chip.matched.enhet-chip {
+  background: var(--matched-bg-e);
+  border-color: var(--matched-border-e);
+}
+
+.chip.wrong-flash {
+  animation: wrongFlash 0.5s ease;
+}
+
+@keyframes wrongFlash {
+  0%, 100% { background: var(--chip-bg); }
+  30% { background: #ffe5e5; border-color: var(--wrong); }
+  60% { background: #ffe5e5; border-color: var(--wrong); }
+}
+
+.chip .match-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.storrelse-chip .match-dot {
+  right: -5px;
+  background: var(--chip-border);
+  border: 1.5px solid var(--bg);
+}
+
+.enhet-chip .match-dot {
+  left: -5px;
+  background: var(--chip-border);
+  border: 1.5px solid var(--bg);
+}
+
+.storrelse-chip.selected .match-dot { background: var(--accent); }
+.enhet-chip.selected .match-dot { background: var(--accent2); }
+.storrelse-chip.matched .match-dot { background: var(--matched-border-s); }
+.enhet-chip.matched .match-dot { background: var(--matched-border-e); }
+
+.chip-symbol {
+  font-size: 0.65rem;
+  color: var(--ink-dim);
+  margin-top: 2px;
+  display: block;
+}
+
+/* Matched pairs list */
+.pairs-section {
+  max-width: 900px;
+  margin: 36px auto 0;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.pairs-section h2 {
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--ink-dim);
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--chip-border);
+  padding-bottom: 8px;
+}
+
+.pairs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.pair-card {
+  background: var(--surface);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.74rem;
+  animation: pairIn 0.3s ease;
+}
+
+@keyframes pairIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.pair-storrelse {
+  color: var(--tag-storrelse);
+  font-weight: 500;
+  flex: 1;
+}
+.pair-arrow { color: var(--ink-dim); }
+.pair-enhet {
+  color: var(--tag-enhet);
+  font-weight: 500;
+  flex: 1;
+  text-align: right;
+}
+.pair-symbol {
+  color: var(--ink-dim);
+  font-size: 0.68rem;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--ink);
+  color: var(--bg);
+  padding: 10px 24px;
+  border-radius: 50px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.good { background: var(--accent2); }
+.toast.bad { background: #c03030; }
+
+/* Victory */
+.victory {
+  position: fixed;
+  inset: 0;
+  background: rgba(245,240,232,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.victory.show { opacity: 1; pointer-events: all; }
+.victory-box {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 16px;
+  padding: 52px 60px;
+  text-align: center;
+  max-width: 420px;
+  width: 90%;
+}
+.victory-box h2 {
+  font-family: 'Fraunces', serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.victory-box h2 em { color: #d4a96a; font-style: italic; font-weight: 300; }
+.victory-box p {
+  font-size: 0.75rem;
+  color: rgba(245,240,232,0.6);
+  margin-bottom: 28px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+}
+.v-stats {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.v-stat { text-align: center; }
+.v-stat-val { font-size: 1.5rem; font-weight: 500; color: #d4a96a; }
+.v-stat-label { font-size: 0.6rem; color: rgba(245,240,232,0.5); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .columns-wrap { grid-template-columns: 1fr 24px 1fr; padding: 0 10px; }
+  .chip { font-size: 0.68rem; padding: 8px 10px; }
+  .header { padding: 14px 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Fysikk <em>Kobling</em></h1>
+  <div class="header-stats">
+    <div class="hstat">Par koblet <span id="hMatched">0</span> / <span id="hTotal">19</span></div>
+    <div class="hstat">Feil <span id="hWrong">0</span></div>
+    <div class="hstat">Tid <span id="hTimer">0:00</span></div>
+    <button class="btn primary" onclick="resetGame()">↺ Start på nytt</button>
+  </div>
+</div>
+
+<div class="instructions" id="instrText">
+  Klikk på en <span style="color:var(--tag-storrelse); font-weight:500">størrelse</span> og deretter riktig <span style="color:var(--tag-enhet); font-weight:500">enhet</span> (eller omvendt) for å koble dem sammen.
+</div>
+
+<div class="columns-wrap">
+  <div>
+    <div class="col-header left">Størrelser</div>
+    <div class="col" id="leftCol"></div>
+  </div>
+  <div class="middle-col" id="middleCol">
+    <svg id="lineCanvas"></svg>
+  </div>
+  <div>
+    <div class="col-header right">Enheter</div>
+    <div class="col" id="rightCol"></div>
+  </div>
+</div>
+
+<div class="pairs-section" id="pairsSection" style="display:none">
+  <h2>Koblede par</h2>
+  <div class="pairs-grid" id="pairsGrid"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="victory" id="victory">
+  <div class="victory-box">
+    <h2>Alle par <em>koblet!</em></h2>
+    <p id="v-msg"></p>
+    <div class="v-stats">
+      <div class="v-stat"><div class="v-stat-val" id="v-matched">19</div><div class="v-stat-label">Par</div></div>
+      <div class="v-stat"><div class="v-stat-val" id="v-wrong">0</div><div class="v-stat-label">Feil</div></div>
+      <div class="v-stat"><div class="v-stat-val" id="v-time">—</div><div class="v-stat-label">Tid</div></div>
+    </div>
+    <button class="btn primary" style="font-size:0.8rem; padding:12px 28px;" onclick="resetGame()">Spill igjen</button>
+  </div>
+</div>
+
+<script>
+const PAIRS = [
+  { storrelse: "Tid",                          enhet: "Sekund",           symbol: "s" },
+  { storrelse: "Strekning",                    enhet: "Meter",            symbol: "m" },
+  { storrelse: "Fart",                         enhet: "Meter per sekund", symbol: "m/s" },
+  { storrelse: "Akselerasjon",                 enhet: "m/s²",             symbol: "m/s²" },
+  { storrelse: "Energi",                       enhet: "Joule",            symbol: "J" },
+  { storrelse: "Arbeid",                       enhet: "Newton·meter",     symbol: "N·m" },
+  { storrelse: "Kraft",                        enhet: "Newton",           symbol: "N" },
+  { storrelse: "Masse",                        enhet: "Kilogram",         symbol: "kg" },
+  { storrelse: "Effekt",                       enhet: "Watt",             symbol: "W" },
+  { storrelse: "Bevegelsesmengde",             enhet: "kg·m/s",           symbol: "kg·m/s" },
+  { storrelse: "Ladning",                      enhet: "Coulomb",          symbol: "C" },
+  { storrelse: "Strøm",                        enhet: "Ampere",           symbol: "A" },
+  { storrelse: "Spenning",                     enhet: "Volt",             symbol: "V" },
+  { storrelse: "Motstand",                     enhet: "Ohm",              symbol: "Ω" },
+  { storrelse: "Temperatur",                   enhet: "Kelvin",           symbol: "K" },
+  { storrelse: "Gasstrykk",                    enhet: "Pascal",           symbol: "Pa" },
+  { storrelse: "Varmekapasitet",               enhet: "J/(kg·K)",         symbol: "J/(kg·K)" },
+  { storrelse: "Smelte- og fordampningsvarme", enhet: "J/kg",             symbol: "J/kg" },
+  { storrelse: "Utstrålingstetthet",           enhet: "W/m²",             symbol: "W/m²" },
+];
+
+// Unique enheter → multiple størrelser can share same enhet name
+// We treat each pair as a unique connection by pairId
+
+let state = {
+  selected: null,     // { id, type } — currently highlighted chip
+  matched: new Set(), // set of pairIds
+  wrongCount: 0,
+  startTime: null,
+  timerInterval: null,
+};
+
+let shuffledLeft = [];
+let shuffledRight = [];
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildUI() {
+  shuffledLeft = shuffle(PAIRS.map((p, i) => ({ ...p, pairId: i })));
+  shuffledRight = shuffle(PAIRS.map((p, i) => ({ ...p, pairId: i })));
+
+  const leftCol = document.getElementById('leftCol');
+  const rightCol = document.getElementById('rightCol');
+  leftCol.innerHTML = '';
+  rightCol.innerHTML = '';
+
+  shuffledLeft.forEach(p => {
+    leftCol.appendChild(makeChip(p, 'storrelse'));
+  });
+  shuffledRight.forEach(p => {
+    rightCol.appendChild(makeChip(p, 'enhet'));
+  });
+
+  drawLines();
+}
+
+function makeChip(p, type) {
+  const el = document.createElement('div');
+  el.className = `chip ${type}-chip`;
+  el.dataset.pairId = p.pairId;
+  el.dataset.type = type;
+  el.id = `chip-${type}-${p.pairId}`;
+
+  const dot = document.createElement('span');
+  dot.className = 'match-dot';
+  el.appendChild(dot);
+
+  const label = document.createElement('span');
+  label.textContent = type === 'storrelse' ? p.storrelse : p.enhet;
+  el.appendChild(label);
+
+  // For units that appear multiple times, show symbol hint
+  if (type === 'enhet' && p.symbol !== p.enhet) {
+    const sym = document.createElement('span');
+    sym.className = 'chip-symbol';
+    sym.textContent = p.symbol;
+    el.appendChild(sym);
+  }
+
+  el.addEventListener('click', () => handleClick(p.pairId, type, el));
+  return el;
+}
+
+function handleClick(pairId, type, el) {
+  if (state.matched.has(pairId) && isFullyMatched(pairId, type)) return;
+
+  // Start timer on first click
+  if (!state.startTime) {
+    state.startTime = Date.now();
+    state.timerInterval = setInterval(updateTimer, 500);
+  }
+
+  // If clicking already-selected chip → deselect
+  if (state.selected && state.selected.pairId === pairId && state.selected.type === type) {
+    clearSelection();
+    return;
+  }
+
+  // If no selection, select this
+  if (!state.selected) {
+    state.selected = { pairId, type };
+    el.classList.add('selected');
+    return;
+  }
+
+  // If same type → switch selection
+  if (state.selected.type === type) {
+    clearSelection();
+    state.selected = { pairId, type };
+    el.classList.add('selected');
+    return;
+  }
+
+  // Different type → try to match
+  const selPairId = state.selected.pairId;
+  const selType = state.selected.type;
+
+  if (selPairId === pairId) {
+    // Correct!
+    markMatched(pairId);
+    clearSelection();
+    const accuracy = Math.round(((state.matched.size) / (state.matched.size + state.wrongCount)) * 100);
+    showToast(`✓ ${PAIRS[pairId].storrelse} = ${PAIRS[pairId].enhet}`, 'good');
+    addPairCard(pairId);
+    updateStats();
+    drawLines();
+    if (state.matched.size === PAIRS.length) {
+      setTimeout(showVictory, 500);
+    }
+  } else {
+    // Wrong!
+    state.wrongCount++;
+    const selEl = document.getElementById(`chip-${selType}-${selPairId}`);
+    if (selEl) selEl.classList.add('wrong-flash');
+    el.classList.add('wrong-flash');
+    setTimeout(() => {
+      if (selEl) selEl.classList.remove('wrong-flash');
+      el.classList.remove('wrong-flash');
+    }, 500);
+    clearSelection();
+    updateStats();
+    showToast('✗ Feil kombinasjon — prøv igjen', 'bad');
+  }
+}
+
+function isFullyMatched(pairId, type) {
+  return state.matched.has(pairId);
+}
+
+function markMatched(pairId) {
+  state.matched.add(pairId);
+  const sEl = document.getElementById(`chip-storrelse-${pairId}`);
+  const eEl = document.getElementById(`chip-enhet-${pairId}`);
+  if (sEl) { sEl.classList.add('matched'); sEl.classList.remove('selected'); }
+  if (eEl) { eEl.classList.add('matched'); eEl.classList.remove('selected'); }
+}
+
+function clearSelection() {
+  if (state.selected) {
+    const el = document.getElementById(`chip-${state.selected.type}-${state.selected.pairId}`);
+    if (el) el.classList.remove('selected');
+  }
+  state.selected = null;
+}
+
+// Draw SVG lines between matched pairs
+function drawLines() {
+  const canvas = document.getElementById('lineCanvas');
+  const middleCol = document.getElementById('middleCol');
+  const mcRect = middleCol.getBoundingClientRect();
+
+  canvas.innerHTML = '';
+
+  state.matched.forEach(pairId => {
+    const sEl = document.getElementById(`chip-storrelse-${pairId}`);
+    const eEl = document.getElementById(`chip-enhet-${pairId}`);
+    if (!sEl || !eEl) return;
+
+    const sDot = sEl.querySelector('.match-dot');
+    const eDot = eEl.querySelector('.match-dot');
+    if (!sDot || !eDot) return;
+
+    const sRect = sDot.getBoundingClientRect();
+    const eRect = eDot.getBoundingClientRect();
+
+    const x1 = sRect.left + sRect.width / 2 - mcRect.left;
+    const y1 = sRect.top + sRect.height / 2 - mcRect.top;
+    const x2 = eRect.left + eRect.width / 2 - mcRect.left;
+    const y2 = eRect.top + eRect.height / 2 - mcRect.top;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const cx = (x1 + x2) / 2;
+    path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
+    path.setAttribute('stroke', 'rgba(200,64,26,0.4)');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke-dasharray', '4 3');
+    canvas.appendChild(path);
+  });
+
+  // Update canvas height
+  const leftH = document.getElementById('leftCol').scrollHeight;
+  const rightH = document.getElementById('rightCol').scrollHeight;
+  canvas.style.height = Math.max(leftH, rightH) + 'px';
+}
+
+function addPairCard(pairId) {
+  const section = document.getElementById('pairsSection');
+  const grid = document.getElementById('pairsGrid');
+  section.style.display = '';
+
+  const card = document.createElement('div');
+  card.className = 'pair-card';
+  card.innerHTML = `
+    <span class="pair-storrelse">${PAIRS[pairId].storrelse}</span>
+    <span class="pair-arrow">→</span>
+    <span class="pair-enhet">${PAIRS[pairId].enhet}</span>
+    <span class="pair-symbol">${PAIRS[pairId].symbol}</span>
+  `;
+  grid.appendChild(card);
+}
+
+function updateStats() {
+  document.getElementById('hMatched').textContent = state.matched.size;
+  document.getElementById('hWrong').textContent = state.wrongCount;
+}
+
+function updateTimer() {
+  if (!state.startTime) return;
+  const e = Math.floor((Date.now() - state.startTime) / 1000);
+  document.getElementById('hTimer').textContent = `${Math.floor(e/60)}:${(e%60).toString().padStart(2,'0')}`;
+}
+
+let toastTimeout;
+function showToast(msg, type) {
+  clearTimeout(toastTimeout);
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  toastTimeout = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function showVictory() {
+  clearInterval(state.timerInterval);
+  const e = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+  const timeStr = `${Math.floor(e/60)}:${(e%60).toString().padStart(2,'0')}`;
+  const accuracy = Math.round((PAIRS.length / (PAIRS.length + state.wrongCount)) * 100);
+
+  document.getElementById('v-matched').textContent = PAIRS.length;
+  document.getElementById('v-wrong').textContent = state.wrongCount;
+  document.getElementById('v-time').textContent = timeStr;
+  document.getElementById('v-msg').textContent =
+    state.wrongCount === 0
+      ? `Perfekt! Ingen feil på ${timeStr}. Imponerende!`
+      : `${accuracy}% nøyaktighet — ${state.wrongCount} feil forsøk på ${timeStr}.`;
+
+  document.getElementById('victory').classList.add('show');
+}
+
+function resetGame() {
+  clearInterval(state.timerInterval);
+  state = { selected: null, matched: new Set(), wrongCount: 0, startTime: null, timerInterval: null };
+  document.getElementById('hMatched').textContent = '0';
+  document.getElementById('hWrong').textContent = '0';
+  document.getElementById('hTimer').textContent = '0:00';
+  document.getElementById('pairsSection').style.display = 'none';
+  document.getElementById('pairsGrid').innerHTML = '';
+  document.getElementById('victory').classList.remove('show');
+  document.getElementById('lineCanvas').innerHTML = '';
+  buildUI();
+}
+
+// Redraw lines on scroll/resize
+window.addEventListener('resize', drawLines);
+document.addEventListener('scroll', drawLines, true);
+
+buildUI();
+</script>
+</body>
+</html>
